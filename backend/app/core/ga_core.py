@@ -1,15 +1,10 @@
 """ga_core.py: Motor del Algoritmo Genético implementado desde cero con NumPy."""
 import numpy as np
 import numpy.typing as npt
-from typing import Dict, Any
+from typing import Dict, Any, List
 from app.core.models import Scenario
 
 def evaluate_makespan(population: npt.NDArray[np.int32], scenario: Scenario) -> npt.NDArray[np.float32]:
-    """
-    Evalúa el makespan (fitness) de cada individuo en la población.
-    Respeta la precedencia de operaciones por trabajo (procesando por niveles) 
-    y la capacidad de las máquinas.
-    """
     pop_size = population.shape[0]
     makespans = np.zeros(pop_size, dtype=np.float32)
 
@@ -18,14 +13,12 @@ def evaluate_makespan(population: npt.NDArray[np.int32], scenario: Scenario) -> 
         job_end_times = np.zeros(scenario.num_jobs, dtype=np.float32)
         machine_end_times = np.zeros(scenario.num_machines, dtype=np.float32)
 
-        # Procesamos por niveles de secuencia para garantizar precedencia de trabajos
         for level_ops in scenario.ops_by_level:
             for op_idx in level_ops:
                 job_idx = scenario.op_to_job[op_idx]
                 machine_idx = chromosome[op_idx]
                 proc_time = scenario.proc_times[op_idx, machine_idx]
 
-                # El inicio es el máximo entre la disponibilidad del trabajo y de la máquina
                 start_time = max(job_end_times[job_idx], machine_end_times[machine_idx])
                 end_time = start_time + proc_time
 
@@ -33,37 +26,59 @@ def evaluate_makespan(population: npt.NDArray[np.int32], scenario: Scenario) -> 
                 machine_end_times[machine_idx] = end_time
 
         makespans[c] = np.max(machine_end_times)
-        
     return makespans
 
+def generate_gantt_data(chromosome: npt.NDArray[np.int32], scenario: Scenario) -> List[Dict[str, Any]]:
+    """
+    Simula el cronograma basado en el cromosoma ganador y genera los datos 
+    exactos de inicio, fin y duración para el Diagrama de Gantt.
+    """
+    gantt_data = []
+    job_end_times = np.zeros(scenario.num_jobs, dtype=np.float32)
+    machine_end_times = np.zeros(scenario.num_machines, dtype=np.float32)
+
+    for level_ops in scenario.ops_by_level:
+        for op_idx in level_ops:
+            job_idx = scenario.op_to_job[op_idx]
+            machine_idx = int(chromosome[op_idx])
+            proc_time = float(scenario.proc_times[op_idx, machine_idx])
+
+            start_time = max(float(job_end_times[job_idx]), float(machine_end_times[machine_idx]))
+            end_time = start_time + proc_time
+
+            gantt_data.append({
+                "job_id": int(job_idx + 1),          # 1-based para frontend
+                "op_id": int(op_idx + 1),            # 1-based para frontend
+                "machine": f"M{machine_idx + 1}",    # Ej: "M1", "M2"
+                "start_time": round(start_time, 2),
+                "end_time": round(end_time, 2),
+                "duration": round(proc_time, 2)
+            })
+
+            job_end_times[job_idx] = end_time
+            machine_end_times[machine_idx] = end_time
+
+    # Ordenar por máquina y luego por tiempo de inicio para un renderizado limpio en D3
+    gantt_data.sort(key=lambda x: (x["machine"], x["start_time"]))
+    return gantt_data
+
 def tournament_selection(population: npt.NDArray[np.int32], fitnesses: npt.NDArray[np.float32], k: int = 3) -> npt.NDArray[np.int32]:
-    """Selección por torneo. Vectorizada para máxima eficiencia."""
     pop_size = population.shape[0]
-    # Generamos índices aleatorios para los torneos (filas: pop_size, columnas: k)
     contestants = np.random.randint(0, pop_size, size=(pop_size, k))
     contestant_fitnesses = fitnesses[contestants]
-    
-    # CORRECCIÓN: np.arange(pop_size) selecciona la fila, np.argmin selecciona la columna ganadora
     winners_idx = contestants[np.arange(pop_size), np.argmin(contestant_fitnesses, axis=1)]
     return population[winners_idx]
 
 def uniform_crossover(parents: npt.NDArray[np.int32]) -> npt.NDArray[np.int32]:
-    """Cruza uniforme vectorizada. (Filosofía: codificado de forma compacta y legible)."""
     pop_size, n_ops = parents.shape
     mask = np.random.rand(pop_size // 2, n_ops) < 0.5
     p1, p2 = parents[0::2], parents[1::2]
     return np.vstack((np.where(mask, p1, p2), np.where(~mask, p1, p2)))
 
 def load_balanced_mutation(population: npt.NDArray[np.int32], scenario: Scenario, mutation_rate: float) -> npt.NDArray[np.int32]:
-    """
-    Mutación sesgada por balance de carga.
-    Identifica la máquina cuello de botella (mayor carga) y reasigna sus operaciones 
-    a la máquina con menor carga, promoviendo el equilibrio y minimizando el makespan.
-    """
     pop_size, n_ops = population.shape
     mutated_pop = population.copy()
     
-    # Calculamos la carga de trabajo (tiempo total) por máquina para cada individuo
     machine_loads = np.zeros((pop_size, scenario.num_machines), dtype=np.float32)
     for c in range(pop_size):
         for m in range(scenario.num_machines):
@@ -81,7 +96,6 @@ def load_balanced_mutation(population: npt.NDArray[np.int32], scenario: Scenario
             continue
             
         ops_on_bottleneck = np.where(population[c] == bottleneck_machine)[0]
-        
         if len(ops_on_bottleneck) > 0:
             op_to_move = np.random.choice(ops_on_bottleneck)
             mutated_pop[c, op_to_move] = least_loaded_machine
@@ -89,7 +103,6 @@ def load_balanced_mutation(population: npt.NDArray[np.int32], scenario: Scenario
     return mutated_pop
 
 def run_ga(scenario: Scenario, params: Dict[str, Any]) -> Dict[str, Any]:
-    """Bucle principal del Algoritmo Genético."""
     pop_size = params.get("pop_size", 100)
     generations = params.get("generations", 200)
     mutation_rate = params.get("mutation_rate", 0.2)
@@ -97,12 +110,7 @@ def run_ga(scenario: Scenario, params: Dict[str, Any]) -> Dict[str, Any]:
     
     np.random.seed(seed)
     
-    # Inicialización aleatoria de la población (Codificación Entera)
-    population = np.random.randint(
-        0, scenario.num_machines, 
-        size=(pop_size, scenario.num_operations), 
-        dtype=np.int32
-    )
+    population = np.random.randint(0, scenario.num_machines, size=(pop_size, scenario.num_operations), dtype=np.int32)
     
     best_makespan_history = []
     global_best_chromosome = None
@@ -113,7 +121,7 @@ def run_ga(scenario: Scenario, params: Dict[str, Any]) -> Dict[str, Any]:
         
         current_best_idx = np.argmin(fitnesses)
         if fitnesses[current_best_idx] < global_best_makespan:
-            global_best_makespan = fitnesses[current_best_idx]
+            global_best_makespan = float(fitnesses[current_best_idx])
             global_best_chromosome = population[current_best_idx].copy()
         best_makespan_history.append(global_best_makespan)
 
@@ -121,8 +129,12 @@ def run_ga(scenario: Scenario, params: Dict[str, Any]) -> Dict[str, Any]:
         offspring = uniform_crossover(parents)
         population = load_balanced_mutation(offspring, scenario, mutation_rate)
 
+    # GENERAR DATOS REALES DEL GANTT
+    gantt_data = generate_gantt_data(global_best_chromosome, scenario)
+
     return {
-        "best_makespan": float(global_best_makespan),
+        "best_makespan": global_best_makespan,
         "best_chromosome": global_best_chromosome.tolist(),
+        "gantt_data": gantt_data,  # <-- NUEVO CAMPO
         "convergence": best_makespan_history
     }
