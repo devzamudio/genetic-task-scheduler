@@ -1,0 +1,7 @@
+Flask==3.0.0
+flask-cors==4.0.0
+mongoengine==0.28.2
+pymongo<4.9.0
+celery[redis]==5.3.6
+numpy==1.26.4
+requests==2.31.0

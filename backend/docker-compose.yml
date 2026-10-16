@@ -1,0 +1,107 @@
+# ==============================================================================
+# Docker Compose: Orquestación del Backend
+# ==============================================================================
+
+
+services:
+  mongodb:
+    image: mongo:5.0  # <--- CAMBIO CLAVE: Versión compatible sin requisito estricto de AVX
+    container_name: genetic_scheduler_mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: genetic_scheduler
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - backend_net
+    healthcheck:
+      test: ["CMD", "mongo", "--eval", "db.adminCommand('ping')"] # Nota: en v5.0 el comando es 'mongo', no 'mongosh'
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ----------------------------------------------------------------------------
+  # Redis: Broker de mensajes para Celery
+  # ----------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: genetic_scheduler_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - backend_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ----------------------------------------------------------------------------
+  # API: Servidor Flask (API REST)
+  # ----------------------------------------------------------------------------
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: genetic_scheduler_api
+    restart: unless-stopped
+    command: python run.py
+    ports:
+      - "5000:5000"
+    env_file:
+      - .env
+    environment:
+      - FLASK_ENV=development
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - .:/app  # Hot-reload en desarrollo
+    networks:
+      - backend_net
+
+  # ----------------------------------------------------------------------------
+  # Worker: Celery Worker (ejecuta el Algoritmo Genético)
+  # ----------------------------------------------------------------------------
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: genetic_scheduler_worker
+    restart: unless-stopped
+    command: celery -A app.extensions.celery_app worker --loglevel=info --concurrency=2
+    env_file:
+      - .env
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    networks:
+      - backend_net
+
+# ------------------------------------------------------------------------------
+# Volúmenes persistentes
+# ------------------------------------------------------------------------------
+volumes:
+  mongo_data:
+    driver: local
+  redis_data:
+    driver: local
+
+# ------------------------------------------------------------------------------
+# Red interna
+# ------------------------------------------------------------------------------
+networks:
+  backend_net:
+    driver: bridge
