@@ -46,8 +46,9 @@ export interface GanttTask {
 export interface ExecutionResult {
   best_makespan: number;
   best_chromosome: number[];
-  gantt_data: GanttTask[]; // <-- AÑADIDO
+  gantt_data: GanttTask[];
   convergence: number[];
+  error?: string;
 }
 // ... (el resto de sus tipos permanecen igual)
 

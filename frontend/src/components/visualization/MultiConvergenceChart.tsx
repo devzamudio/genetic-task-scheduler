@@ -38,7 +38,7 @@ export function MultiConvergenceChart({ data }: MultiConvergenceChartProps) {
     svg.append('text').attr('x', width / 2).attr('y', height + 35).attr('fill', 'black').attr('text-anchor', 'middle').text('Generación');
     svg.append('text').attr('transform', 'rotate(-90)').attr('y', -45).attr('x', -height / 2).attr('fill', 'black').attr('text-anchor', 'middle').text('Makespan');
 
-    const drawLine = (dataArr: number[], color: string, label: string) => {
+    const drawLine = (dataArr: number[], color: string) => {
       const line = d3.line<number>()
         .x((_, i) => xScale(i))
         .y(d => yScale(d))
@@ -52,9 +52,9 @@ export function MultiConvergenceChart({ data }: MultiConvergenceChartProps) {
         .attr('d', line);
     };
 
-    drawLine(data.best, '#10b981', 'Mejor');
-    drawLine(data.worst, '#ef4444', 'Peor');
-    drawLine(data.avg, '#3b82f6', 'Promedio');
+    drawLine(data.best, '#10b981');
+    drawLine(data.worst, '#ef4444');
+    drawLine(data.avg, '#3b82f6');
 
     const legend = svg.append('g').attr('transform', `translate(${width + 10}, 0)`);
     const legendData = [

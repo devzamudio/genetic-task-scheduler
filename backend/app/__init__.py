@@ -10,7 +10,22 @@ def create_app() -> Flask:
     app.config.from_object(Config)
     
     # Habilitar CORS para el Frontend (React)
-    CORS(app)
+    CORS(
+        app,
+        resources={
+            r"/api/*": {
+                "origins": [
+                    "http://localhost:5173",
+                    "http://127.0.0.1:5173",
+                    "http://localhost:3000",
+                    "http://127.0.0.1:3000",
+                ]
+            }
+        },
+        supports_credentials=True,
+        allow_headers=["Content-Type", "Authorization", "Accept"],
+        methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    )
     
     # Conectar a MongoDB
     connect(host=app.config["MONGO_URI"])

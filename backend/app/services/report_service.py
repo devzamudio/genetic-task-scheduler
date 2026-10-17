@@ -92,4 +92,4 @@ class ReportService:
             "progress": f"{completed_count}/{total}",
             "metrics": metrics,
             "convergence_data": convergence_data
-        }2
+        }

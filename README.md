@@ -52,8 +52,22 @@ For the recommended containerized setup, you need:
 - Docker Compose
 - Node.js 18+
 - npm
+- Python 3 (optional, mainly for local testing and scripts)
 
 > Docker startup is intended to make the full API, MongoDB, and Redis environment easier to set up.
+
+### Docker permission issue on Linux
+
+If Docker is installed but the user cannot run it, the project script will detect this and print a clear message with the usual fix:
+
+```bash
+sudo groupadd -f docker
+sudo usermod -aG docker "$USER"
+newgrp docker
+sudo systemctl enable --now docker
+```
+
+This is a host-level permission problem, not a project bug. The script validates `docker info` before trying to start the containers.
 
 ## Quick start
 
@@ -66,13 +80,21 @@ chmod +x setup_and_run.sh
 ./setup_and_run.sh
 ```
 
+If the system is missing dependencies, you can use:
+
+```bash
+./setup_and_run.sh --install-deps
+```
+
+This mode detects the Linux distribution and tries to install the required packages automatically (Docker, Docker Compose, Node.js, npm, Python, etc.).
+
 #### Windows (PowerShell)
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\setup_and_run.ps1
 ```
 
-These scripts validate dependencies, create the `.env` file if it does not exist, start Docker, and launch the frontend.
+These scripts validate dependencies, create the `.env` file if it does not exist, check Docker permissions, start Docker, and launch the frontend.
 
 ### Option 2: Manual installation
 
@@ -96,6 +118,18 @@ cd ../frontend
 npm install
 npm run dev
 ```
+
+### Docker troubleshooting
+
+If the command fails with a permissions error, run:
+
+```bash
+sudo groupadd -f docker
+sudo usermod -aG docker "$USER"
+newgrp docker
+```
+
+Then restart the terminal or log out/in again.
 
 ## Default URLs
 
